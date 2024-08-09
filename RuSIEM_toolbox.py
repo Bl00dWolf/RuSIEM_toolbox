@@ -17,6 +17,7 @@ if os.path.isfile(f'current_eps_{today_date}.csv'):
     eps_file_exists = True
 
 
+# Вывод основного меню и опций
 def hello_message() -> None:
     print(f'\n{'-' * 20}\n'
           f'Добро пожаловать в RuSIEM Toolbox версии {settings['toolbox_version']}!\n'
@@ -83,6 +84,7 @@ def get_eps(*, to_file: bool = False) -> None | str:
         time.sleep(settings['time_to_sleep'])
 
 
+# Создание и загрузка настроек JSON.
 def settings_file() -> None:
     global settings
     if not os.path.isfile('RuSIEM_toolbox_settings.json'):
@@ -98,6 +100,7 @@ def settings_file() -> None:
     # print(settings['ip_addr'], settings['api_key'], settings['time_to_sleep'])
 
 
+# Сохранение новых параметров настроек
 def save_settings(param, value) -> None:
     with open('RuSIEM_toolbox_settings.json', 'w', encoding='utf-8') as file:
         global settings
@@ -105,13 +108,21 @@ def save_settings(param, value) -> None:
         json.dump(settings, file, indent=4, ensure_ascii=True)
 
 
+# Сохранение инцидента и его событий в файл
 def save_incident(num: int):
     request_params = {'_api_key': settings['api_key']}
+    request_params_limit = {'_api_key': settings['api_key'], 'limit': 999}
     req_inc = requests.get(f'https://{settings['ip_addr']}/api/v1/incidents/{num}/fullinfo', verify=False,
                            params=request_params)
-    print(req_inc.text)
-    with open(f'incident_{num}', 'w', encoding='utf-8') as file:
-        json.dump(req_inc.text, file, indent=4, ensure_ascii=True)
+    req_events = requests.get(f'https://{settings['ip_addr']}/api/v1/events/incident/{num}', verify=False,
+                              params=request_params_limit)
+
+    with open(f'incident_{num}.json', 'w', encoding='utf-8') as file:
+        json.dump(json.loads(req_inc.text), file, indent=4, ensure_ascii=True)
+    with open(f'events_of_incident_{num}.json', 'w', encoding='utf-8') as file:
+        json.dump(json.loads(req_events.text), file, indent=4, ensure_ascii=True)
+    print(f'Инцидент сохранен в файл:\n{os.getcwd()}\\incident_{num}.json\n'
+          f'События инцидента сохранены в файл:\n{os.getcwd()}\\events_of_incident_{num}.json')
 
 
 if __name__ == '__main__':
