@@ -5,6 +5,7 @@ import time
 import json
 import csv
 import os
+from fabric import Connection, Config
 
 # Убираем предупреждение о самоподписанном сертификате СИЕМ
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -28,8 +29,11 @@ def hello_message() -> None:
           f'{'-' * 20}\n'
           f'4) Задать IP RuSIEM системы (по умолчанию 127.0.0.1)\n'
           f'5) Задать ключ API (по умолчанию не задан)\n'
+          f'6) Задать данные для SSH (логин, пароль, пароль от sudo)\n'
           f'{'-' * 20}\n'
-          f'6) Выгрузить инцидент и события\n'
+          f'7) Выгрузить инцидент и события\n'
+          f'8) Показать версии компонентов SIEM и ТТХ сервера\n'
+          f'9) Скачать логи (laravel, analytics, lsinput и тд)\n'
           f'{'-' * 20}\n'
           f'0) Выход'
           )
@@ -91,7 +95,8 @@ def settings_file() -> None:
         print(f'Файла конфигурации не существует, создаем:\n'
               f'{os.getcwd()}\\RuSIEM_toolbox_settings.json')
         with open('RuSIEM_toolbox_settings.json', 'w', encoding='utf-8') as file:
-            settings = {'api_key': 'NO_API_KEY', 'ip_addr': '127.0.0.1', 'time_to_sleep': 5, 'toolbox_version': '0.2'}
+            settings = {'api_key': 'NO_API_KEY', 'ip_addr': '127.0.0.1', 'time_to_sleep': 5, 'ssh_login': 'None',
+                        'ssh_password': 'None', 'ssh_sudo_pass': '', 'toolbox_version': '0.3'}
             json.dump(settings, file, indent=4, ensure_ascii=True)
     else:
         with open('RuSIEM_toolbox_settings.json', 'r', encoding='utf-8') as file:
@@ -125,6 +130,75 @@ def save_incident(num: int):
           f'События инцидента сохранены в файл:\n{os.getcwd()}\\events_of_incident_{num}.json')
 
 
+def show_rusiem_version() -> None | int:
+    config = Config(overrides={'sudo': {'password': settings['ssh_sudo_pass']}})
+    with Connection(settings['ip_addr'], port=22, user=settings['ssh_login'],
+                    connect_kwargs={'password': settings['ssh_password']},
+                    config=config) as conn:
+
+        # Проверяем коннект к серверу
+        try:
+            conn.run('pwd', hide=True)
+        except Exception as err:
+            print(f'Не удалось подключится к серверу {settings['ip_addr']}'
+                  f'\nПроверьте корректность данных для подключения.')
+            return -1
+
+        # Получаем версии ТТХ сервера:
+        try:
+            print('\nТТХ компонентов сервера:')
+            res = conn.run('cat /etc/os-release; free -h; lsblk; lscpu; df -h', hide=True, encoding='utf-8')
+            print(res.stdout.strip())
+        except Exception as err:
+            print(f'Не удалось получить ТТХ компонентов сервера\n')
+
+        # Получаем версии пакетов через dpkg
+        try:
+            print('\nВерсии компонентов RuSIEM:')
+            res = conn.run('dpkg -l | grep rusiem', hide=True, encoding='utf-8')
+            print(res.stdout.strip())
+            res = conn.run('dpkg -l | grep elastic', hide=True, encoding='utf-8')
+            print(res.stdout.strip())
+            res = conn.run('dpkg -l | grep redis', hide=True, encoding='utf-8')
+            print(res.stdout.strip())
+            res = conn.run('dpkg -l | grep clickhouse', hide=True, encoding='utf-8')
+            print(res.stdout.strip())
+            res = conn.run('dpkg -l | grep postgre', hide=True, encoding='utf-8')
+            print(res.stdout.strip())
+        except Exception as err:
+            print(f'Не удалось получить версию компонентов русием\n')
+
+        # Получаем версии cлужб
+        services = ['lsinput', 'frs_server', 'lsfilter', 'lselastic']
+        for service in services:
+            try:
+                print(f'\nВерсия службы {service}:')
+                res = conn.run(f'/opt/rusiem/{service}/bin/{service} -v', hide=True, encoding='utf-8')
+                print(res.stdout.strip())
+            except Exception as err:
+                print(f'Не удалось получить версию службы {service}. Возможно ее нет на сервере.\n')
+
+
+def get_logs() -> None | int:
+    config = Config(overrides={'sudo': {'password': settings['ssh_sudo_pass']}})
+    with Connection(settings['ip_addr'], port=22, user=settings['ssh_login'],
+                    connect_kwargs={'password': settings['ssh_password']}, config=config) as conn:
+
+        # Проверяем коннект к серверу
+        try:
+            conn.run('pwd', hide=True)
+        except Exception as err:
+            print(f'Не удалось подключится к серверу {settings['ip_addr']}'
+                  f'\nПроверьте корректность данных для подключения.')
+            return -1
+
+        logs_files = ['/var/www/html/app/storage/logs/user_actions.log', '']
+        # conn.sudo('cp /var/lib/clickhouse/uuid /tmp/toolbox_uuid', hide='stderr')
+        # conn.sudo('chmod 777 /tmp/toolbox_uuid', hide='stderr')
+        # conn.get('/tmp/toolbox_uuid')
+        # conn.sudo('rm -rf /tmp/toolbox_uuid', hide='stderr')
+
+
 if __name__ == '__main__':
     def main() -> None:
         settings_file()
@@ -145,12 +219,24 @@ if __name__ == '__main__':
             case 5:  # Задать ключ API (по умолчанию не задан)
                 value = input('Введите API ключ:\n')
                 save_settings('api_key', value)
-            case 6:  # Выгрузить инцидент и события
+            case 6:  # Задать данные для SSH (логин, пароль, пароль от sudo)
+                ssh_login = input('Введите логин от SSH к серверу СИЕМ:\n')
+                ssh_pass = input('Введите пароль от SSH:\n')
+                ssh_sudo_pass = input('Введите пароль от sudo:\n')
+                save_settings('ssh_login', ssh_login)
+                save_settings('ssh_password', ssh_pass)
+                save_settings('ssh_sudo_pass', ssh_sudo_pass)
+            case 7:  # Выгрузить инцидент и события
                 save_incident(int(input('Введите номер инцидента: \n')))
+            case 8:  # Показать версии компонентов RuSIEM
+                show_rusiem_version()
+            case 9:  # Скачать логи
+                pass
             case 0:  # Выход
                 return
             case _:
                 print('Такого пункта меню нет')
+        time.sleep(5)
         main()
 
 
