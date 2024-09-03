@@ -132,7 +132,8 @@ def save_incident(num: int):
 
 def show_rusiem_version() -> None | int:
     config = Config(overrides={'sudo': {'password': settings['ssh_sudo_pass']}})
-    with Connection(settings['ip_addr'], port=22, user=settings['ssh_login'],
+    # TODO порт временно так указан, надо его сделать настраевымым
+    with Connection(settings['ip_addr'], port=3216, user=settings['ssh_login'],
                     connect_kwargs={'password': settings['ssh_password']},
                     config=config) as conn:
 
@@ -166,7 +167,7 @@ def show_rusiem_version() -> None | int:
             res = conn.run('dpkg -l | grep postgre', hide=True, encoding='utf-8')
             print(res.stdout.strip())
         except Exception as err:
-            print(f'Не удалось получить версию компонентов русием\n')
+            print(f'Не удалось получить версию всех компонентов русием\nЕсли установка не AIO, то это нормально.\n')
 
         # Получаем версии cлужб
         services = ['lsinput', 'frs_server', 'lsfilter', 'lselastic']
@@ -181,7 +182,8 @@ def show_rusiem_version() -> None | int:
 
 def get_logs() -> None | int:
     config = Config(overrides={'sudo': {'password': settings['ssh_sudo_pass']}})
-    with Connection(settings['ip_addr'], port=22, user=settings['ssh_login'],
+    # TODO порт временно так указан, надо его сделать настраевымым
+    with Connection(settings['ip_addr'], port=3216, user=settings['ssh_login'],
                     connect_kwargs={'password': settings['ssh_password']}, config=config) as conn:
 
         # Проверяем коннект к серверу
@@ -192,7 +194,30 @@ def get_logs() -> None | int:
                   f'\nПроверьте корректность данных для подключения.')
             return -1
 
-        logs_files = ['/var/www/html/app/storage/logs/user_actions.log', '']
+        # TODO стоит добавить этот список в настройки
+        logs_files = ['/var/www/html/app/storage/logs/user_actions.log', '/var/log/redis/redis-server.log',
+                      '/var/log/postgresql/postgresql-10-main.log', '/opt/rusiem/lsinput/log/*.log',
+                      '/opt/rusiem/lsinput/log/*.log.1*', '/opt/rusiem/lsfilter/log/*.log',
+                      '/opt/rusiem/lsfilter/log/*.log.1*', '/opt/rusiem/lselastic/log/*.log',
+                      '/opt/rusiem/lselastic/log/*.log.1*', '/opt/rusiem/frs_server/log/*.log',
+                      '/opt/rusiem/frs_server/log/*.log.1*', '/var/www/html/app/storage/logs/*.log',
+                      '/var/log/elasticsearch/rusiem.log', '/var/log/asset-rest-api/asset-api.log',
+                      '/var/log/rusiem-processing/app.log', '/var/log/clickhouse-server/clickhouse-server.log',
+                      '/var/log/clickhouse-server/clickhouse-server.err.log', '/var/mail/root']
+
+        conn.sudo(f'rm -rf /tmp/rusiem_tolboox_{today_date}', hide='stderr')
+        conn.run(f'mkdir /tmp/rusiem_tolboox_{today_date}', hide='stderr')
+        for log_file in logs_files:
+            try:
+                conn.sudo(f'cp {log_file} /tmp/rusiem_tolboox_{today_date}/', hide='stderr')
+            except:
+                print(f'Файл {log_file} не найден, пропускаем.')
+        conn.sudo(f'chmod 777 /tmp/rusiem_tolboox_{today_date}/*', hide='stderr')
+        print(f'Создаем архив с логами, ждите.')
+        conn.run(f'tar -czvf /tmp/rusiem_tolboox_{today_date}/logs.tar.gz /tmp/rusiem_tolboox_{today_date}/*',
+                 hide=True)
+        conn.get(f'/tmp/rusiem_tolboox_{today_date}/logs.tar.gz')
+        conn.sudo(f'rm -rf /tmp/rusiem_tolboox_{today_date}', hide='stderr')
         # conn.sudo('cp /var/lib/clickhouse/uuid /tmp/toolbox_uuid', hide='stderr')
         # conn.sudo('chmod 777 /tmp/toolbox_uuid', hide='stderr')
         # conn.get('/tmp/toolbox_uuid')
@@ -231,7 +256,7 @@ if __name__ == '__main__':
             case 8:  # Показать версии компонентов RuSIEM
                 show_rusiem_version()
             case 9:  # Скачать логи
-                pass
+                get_logs()
             case 0:  # Выход
                 return
             case _:
