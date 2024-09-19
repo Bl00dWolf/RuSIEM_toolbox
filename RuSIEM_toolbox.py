@@ -27,9 +27,9 @@ def hello_message() -> None:
           f'2) Отобразить и записать статистику EPS в CSV файл\n'
           f'3) Установить интервал считывания ESP (по умолчанию раз в 5 секунд)\n'
           f'{'-' * 20}\n'
-          f'4) Задать IP RuSIEM системы (по умолчанию 127.0.0.1)\n'
+          f'4) Задать IP RuSIEM системы (по умолчанию 127.0.0.1) и порт (по умолчанию 443)\n'
           f'5) Задать ключ API (по умолчанию не задан)\n'
-          f'6) Задать данные для SSH (логин, пароль, пароль от sudo)\n'
+          f'6) Задать данные для SSH (логин, пароль, пароль от sudo, порт)\n'
           f'{'-' * 20}\n'
           f'7) Выгрузить инцидент и события\n'
           f'8) Показать версии компонентов SIEM и ТТХ сервера\n'
@@ -43,9 +43,10 @@ def get_eps(*, to_file: bool = False) -> None | str:
     request_params = {'_api_key': settings['api_key']}
     # Проверяем можем ли мы получить данные о текущем значении EPS или что-то не так.
     try:
-        req_search_eps = requests.get(f'https://{settings['ip_addr']}/api/v1/system/searchEps', verify=False,
+        req_search_eps = requests.get(f'https://{settings['ip_addr']}:{settings['web_port']}/api/v1/system/searchEps',
+                                      verify=False,
                                       params=request_params)
-        req_eps = requests.get(f'https://{settings['ip_addr']}/api/v1/system/eps', verify=False, params=request_params)
+        req_eps = requests.get(f'https://{settings['ip_addr']}:{settings['web_port']}/api/v1/system/eps', verify=False, params=request_params)
     except Exception as err:
         print('Не удалось установить соединение с SIEM, проверьте верность IP адреса')
         print(err)
@@ -70,9 +71,9 @@ def get_eps(*, to_file: bool = False) -> None | str:
 
             # Бесконечно с заданным интервалом запрашиваем и пишем данные.
             while 1:
-                req_search_eps = requests.get(f'https://{settings['ip_addr']}/api/v1/system/searchEps', verify=False,
+                req_search_eps = requests.get(f'https://{settings['ip_addr']}:{settings['web_port']}/api/v1/system/searchEps', verify=False,
                                               params=request_params)
-                req_eps = requests.get(f'https://{settings['ip_addr']}/api/v1/system/eps', verify=False,
+                req_eps = requests.get(f'https://{settings['ip_addr']}:{settings['web_port']}/api/v1/system/eps', verify=False,
                                        params=request_params)
                 writer_csv.writerow([datetime.now(), req_search_eps.text, req_eps.text])
                 print(
@@ -81,9 +82,9 @@ def get_eps(*, to_file: bool = False) -> None | str:
 
     # Если запись в файл не выбрана, то выводим текущие значения c заданным интервалом ожидания.
     while 1:
-        req_search_eps = requests.get(f'https://{settings['ip_addr']}/api/v1/system/searchEps', verify=False,
+        req_search_eps = requests.get(f'https://{settings['ip_addr']}:{settings['web_port']}/api/v1/system/searchEps', verify=False,
                                       params=request_params)
-        req_eps = requests.get(f'https://{settings['ip_addr']}/api/v1/system/eps', verify=False, params=request_params)
+        req_eps = requests.get(f'https://{settings['ip_addr']}:{settings['web_port']}/api/v1/system/eps', verify=False, params=request_params)
         print(f'{datetime.now()} Текущее EPS (searchEps): {req_search_eps.text:>6}; EPS (eps): {req_eps.text:>6}')
         time.sleep(settings['time_to_sleep'])
 
@@ -96,7 +97,8 @@ def settings_file() -> None:
               f'{os.getcwd()}\\RuSIEM_toolbox_settings.json')
         with open('RuSIEM_toolbox_settings.json', 'w', encoding='utf-8') as file:
             settings = {'api_key': 'NO_API_KEY', 'ip_addr': '127.0.0.1', 'time_to_sleep': 5, 'ssh_login': 'None',
-                        'ssh_password': 'None', 'ssh_sudo_pass': '', 'toolbox_version': '0.3'}
+                        'ssh_password': 'None', 'ssh_sudo_pass': '', 'toolbox_version': 0.3, 'ssh_port': 22,
+                        'web_port': 443}
             json.dump(settings, file, indent=4, ensure_ascii=True)
     else:
         with open('RuSIEM_toolbox_settings.json', 'r', encoding='utf-8') as file:
@@ -117,9 +119,9 @@ def save_settings(param, value) -> None:
 def save_incident(num: int):
     request_params = {'_api_key': settings['api_key']}
     request_params_limit = {'_api_key': settings['api_key'], 'limit': 999}
-    req_inc = requests.get(f'https://{settings['ip_addr']}/api/v1/incidents/{num}/fullinfo', verify=False,
+    req_inc = requests.get(f'https://{settings['ip_addr']}:{settings['web_port']}/api/v1/incidents/{num}/fullinfo', verify=False,
                            params=request_params)
-    req_events = requests.get(f'https://{settings['ip_addr']}/api/v1/events/incident/{num}', verify=False,
+    req_events = requests.get(f'https://{settings['ip_addr']}:{settings['web_port']}/api/v1/events/incident/{num}', verify=False,
                               params=request_params_limit)
 
     with open(f'incident_{num}.json', 'w', encoding='utf-8') as file:
@@ -132,8 +134,8 @@ def save_incident(num: int):
 
 def show_rusiem_version() -> None | int:
     config = Config(overrides={'sudo': {'password': settings['ssh_sudo_pass']}})
-    # TODO порт временно так указан, надо его сделать настраевымым
-    with Connection(settings['ip_addr'], port=3216, user=settings['ssh_login'],
+
+    with Connection(settings['ip_addr'], port=settings['ssh_port'], user=settings['ssh_login'],
                     connect_kwargs={'password': settings['ssh_password']},
                     config=config) as conn:
 
@@ -182,8 +184,8 @@ def show_rusiem_version() -> None | int:
 
 def get_logs() -> None | int:
     config = Config(overrides={'sudo': {'password': settings['ssh_sudo_pass']}})
-    # TODO порт временно так указан, надо его сделать настраевымым
-    with Connection(settings['ip_addr'], port=3216, user=settings['ssh_login'],
+
+    with Connection(settings['ip_addr'], port=settings['ssh_port'], user=settings['ssh_login'],
                     connect_kwargs={'password': settings['ssh_password']}, config=config) as conn:
 
         # Проверяем коннект к серверу
@@ -216,7 +218,9 @@ def get_logs() -> None | int:
         print(f'Создаем архив с логами, ждите.')
         conn.run(f'tar -czvf /tmp/rusiem_tolboox_{today_date}/logs.tar.gz /tmp/rusiem_tolboox_{today_date}/*',
                  hide=True)
+        print(f'Скачиваем созданный архив, ждите.')
         conn.get(f'/tmp/rusiem_tolboox_{today_date}/logs.tar.gz')
+        print(f'Архив сохранен в:\n{os.getcwd()}\\logs.tar.gz')
         conn.sudo(f'rm -rf /tmp/rusiem_tolboox_{today_date}', hide='stderr')
         # conn.sudo('cp /var/lib/clickhouse/uuid /tmp/toolbox_uuid', hide='stderr')
         # conn.sudo('chmod 777 /tmp/toolbox_uuid', hide='stderr')
@@ -238,19 +242,23 @@ if __name__ == '__main__':
             case 3:  # Установить интервал считывания ESP (по умолчанию раз в 5 секунд)
                 value = int(input('Введите интервал в секундах между опросом значения EPS:\n'))
                 save_settings('time_to_sleep', value)
-            case 4:  # Задать IP RuSIEM системы (по умолчанию 127.0.0.1)
+            case 4:  # Задать IP RuSIEM системы (по умолчанию 127.0.0.1) и порт (по умолчанию 443)
                 value = input('Введите IP адрес СИЕМ системы (например 17.12.3.7):\n')
                 save_settings('ip_addr', value)
+                value = int(input('Введите ПОРТ адрес СИЕМ системы (например 443 если обычный HTTPS):\n'))
+                save_settings('web_port', value)
             case 5:  # Задать ключ API (по умолчанию не задан)
                 value = input('Введите API ключ:\n')
                 save_settings('api_key', value)
-            case 6:  # Задать данные для SSH (логин, пароль, пароль от sudo)
+            case 6:  # Задать данные для SSH (логин, пароль, пароль от sudo, порт)
                 ssh_login = input('Введите логин от SSH к серверу СИЕМ:\n')
                 ssh_pass = input('Введите пароль от SSH:\n')
                 ssh_sudo_pass = input('Введите пароль от sudo:\n')
+                ssh_port = int(input('Введите порт SSH (обычно 22):\n'))
                 save_settings('ssh_login', ssh_login)
                 save_settings('ssh_password', ssh_pass)
                 save_settings('ssh_sudo_pass', ssh_sudo_pass)
+                save_settings('ssh_port', ssh_port)
             case 7:  # Выгрузить инцидент и события
                 save_incident(int(input('Введите номер инцидента: \n')))
             case 8:  # Показать версии компонентов RuSIEM
