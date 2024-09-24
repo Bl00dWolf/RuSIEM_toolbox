@@ -156,20 +156,38 @@ def show_rusiem_version() -> None | int:
             print(f'Не удалось получить ТТХ компонентов сервера\n')
 
         # Получаем версии пакетов через dpkg
+        # TODO возможно стоит объединить в цикл один
+        print('\nВерсии компонентов RuSIEM:')
         try:
-            print('\nВерсии компонентов RuSIEM:')
             res = conn.run('dpkg -l | grep rusiem', hide=True, encoding='utf-8')
             print(res.stdout.strip())
+        except Exception as err:
+            print(f'Не удалось получить версию всех компонентов РуСием\nЕсли это машина с Elastic отдельная или без RuSIEM то это нормально.\n')
+
+        try:
             res = conn.run('dpkg -l | grep elastic', hide=True, encoding='utf-8')
             print(res.stdout.strip())
+        except Exception as err:
+            print(f'Не удалось получить версию всех ElasticSearch\nЕсли установка не AIO, то это нормально.\n')
+
+        try:
             res = conn.run('dpkg -l | grep redis', hide=True, encoding='utf-8')
             print(res.stdout.strip())
+        except Exception as err:
+            print(f'Не удалось получить версию Redis\nЕсли установка не AIO или без аналитики то это нормально.\n')
+
+        try:
             res = conn.run('dpkg -l | grep clickhouse', hide=True, encoding='utf-8')
             print(res.stdout.strip())
+        except Exception as err:
+            print(f'Не удалось получить версию ClickHouse\nЕсли установка не AIO, то возможно это нормально.\n')
+
+        try:
             res = conn.run('dpkg -l | grep postgre', hide=True, encoding='utf-8')
             print(res.stdout.strip())
         except Exception as err:
-            print(f'Не удалось получить версию всех компонентов русием\nЕсли установка не AIO, то это нормально.\n')
+            print(f'Не удалось получить версию postgre sql\nЕсли установка не AIO, то возможно это нормально.\n')
+
 
         # Получаем версии cлужб
         services = ['lsinput', 'frs_server', 'lsfilter', 'lselastic']
