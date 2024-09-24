@@ -1,3 +1,5 @@
+from random import choice
+
 import requests
 import urllib3
 from datetime import datetime
@@ -135,9 +137,9 @@ def settings_file() -> None:
                     settings_is_last_version = False
             settings = settings_from_file
 
-            if not settings_is_last_version:
-                with open('RuSIEM_toolbox_settings.json', 'w', encoding='utf-8') as file:
-                    json.dump(settings, file, indent=4, ensure_ascii=True)
+        if not settings_is_last_version:
+            with open('RuSIEM_toolbox_settings.json', 'w', encoding='utf-8') as file:
+                json.dump(settings, file, indent=4, ensure_ascii=True)
 
     # print(settings['ip_addr'], settings['api_key'], settings['time_to_sleep'])
 
@@ -230,8 +232,30 @@ def show_rusiem_version() -> None | int:
 
 
 def set_logs() -> None:
-    logs = list(enumerate(settings['log_files']))
-    print(logs)
+    logs = list(enumerate(settings['log_files'], 1))
+    print('Текущий список логов для сбора:\n')
+    for log in logs:
+        print(f'{log[0]:3}: {log[1]}')
+
+    print('\n1) Удалить лог из списка \n2) Добавить лог в список')
+    choice = input()
+    if choice == '1':
+        print('Какой файл удалить? Укажите номер.')
+        num = int(input())
+        try:
+            del settings['log_files'][num - 1]
+            save_settings('log_files', settings['log_files'])
+            print('Лог файл удален из списка успешно')
+        except Exception as err:
+            print('Такого номера нет в списке!')
+    elif choice == '2':
+        print('Какой файл (или путь) добавить? Введите в корректном формате.')
+        log = input()
+        settings['log_files'].append(log)
+        save_settings('log_files', settings['log_files'])
+        print('Лог файл успешно добавлен!')
+    else:
+        print('Такого пункта нет.')
 
 
 def get_logs() -> None | int:
