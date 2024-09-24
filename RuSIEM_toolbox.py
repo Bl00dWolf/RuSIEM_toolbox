@@ -30,10 +30,11 @@ def hello_message() -> None:
           f'4) Задать IP RuSIEM системы (по умолчанию 127.0.0.1) и порт (по умолчанию 443)\n'
           f'5) Задать ключ API (по умолчанию не задан)\n'
           f'6) Задать данные для SSH (логин, пароль, пароль от sudo, порт)\n'
+          f'7) Задать логи для выгрузки (пути и имена файлов)\n'
           f'{'-' * 20}\n'
-          f'7) Выгрузить инцидент и события\n'
-          f'8) Показать версии компонентов SIEM и ТТХ сервера\n'
-          f'9) Скачать логи (laravel, analytics, lsinput и тд)\n'
+          f'8) Выгрузить инцидент и события\n'
+          f'9) Показать версии компонентов SIEM и ТТХ сервера\n'
+          f'10) Скачать логи (laravel, analytics, lsinput и тд, настроенные в пункте 7)\n'
           f'{'-' * 20}\n'
           f'0) Выход'
           )
@@ -104,20 +105,20 @@ def save_settings(param, value) -> None:
 
 # Создание и загрузка настроек JSON.
 def settings_file() -> None:
-    logs_files = ['/var/www/html/app/storage/logs/user_actions.log', '/var/log/redis/redis-server.log',
-                  '/var/log/postgresql/postgresql-10-main.log', '/opt/rusiem/lsinput/log/*.log',
-                  '/opt/rusiem/lsinput/log/*.log.1*', '/opt/rusiem/lsfilter/log/*.log',
-                  '/opt/rusiem/lsfilter/log/*.log.1*', '/opt/rusiem/lselastic/log/*.log',
-                  '/opt/rusiem/lselastic/log/*.log.1*', '/opt/rusiem/frs_server/log/*.log',
-                  '/opt/rusiem/frs_server/log/*.log.1*', '/var/www/html/app/storage/logs/*.log',
-                  '/var/log/elasticsearch/rusiem.log', '/var/log/asset-rest-api/asset-api.log',
-                  '/var/log/rusiem-processing/app.log', '/var/log/clickhouse-server/clickhouse-server.log',
-                  '/var/log/clickhouse-server/clickhouse-server.err.log', '/var/mail/root']
+    log_files = ['/var/www/html/app/storage/logs/user_actions.log', '/var/log/redis/redis-server.log',
+                 '/var/log/postgresql/postgresql-10-main.log', '/opt/rusiem/lsinput/log/*.log',
+                 '/opt/rusiem/lsinput/log/*.log.1*', '/opt/rusiem/lsfilter/log/*.log',
+                 '/opt/rusiem/lsfilter/log/*.log.1*', '/opt/rusiem/lselastic/log/*.log',
+                 '/opt/rusiem/lselastic/log/*.log.1*', '/opt/rusiem/frs_server/log/*.log',
+                 '/opt/rusiem/frs_server/log/*.log.1*', '/var/www/html/app/storage/logs/*.log',
+                 '/var/log/elasticsearch/rusiem.log', '/var/log/asset-rest-api/asset-api.log',
+                 '/var/log/rusiem-processing/app.log', '/var/log/clickhouse-server/clickhouse-server.log',
+                 '/var/log/clickhouse-server/clickhouse-server.err.log', '/var/mail/root']
 
     global settings
     settings = {'api_key': 'NO_API_KEY', 'ip_addr': '127.0.0.1', 'time_to_sleep': 5, 'ssh_login': 'None',
-                'ssh_password': 'None', 'ssh_sudo_pass': '', 'toolbox_version': 0.3, 'ssh_port': 22,
-                'web_port': 443, 'log_files': logs_files}
+                'ssh_password': 'None', 'ssh_sudo_pass': '', 'toolbox_version': 0.4, 'ssh_port': 22,
+                'web_port': 443, 'log_files': log_files}
 
     if not os.path.isfile('RuSIEM_toolbox_settings.json'):
         print(f'Файла конфигурации не существует, создаем:\n'
@@ -126,12 +127,17 @@ def settings_file() -> None:
             json.dump(settings, file, indent=4, ensure_ascii=True)
     else:
         with open('RuSIEM_toolbox_settings.json', 'r', encoding='utf-8') as file:
-            settings_from_file = json.load(file)
+            settings_is_last_version = True
+            settings_from_file: dict = json.load(file)
             for key, value in settings.items():
-                if key not in settings_from_file:
+                if key not in settings_from_file.keys():
                     settings_from_file[key] = value
-                    save_settings(key, value)
+                    settings_is_last_version = False
             settings = settings_from_file
+
+            if not settings_is_last_version:
+                with open('RuSIEM_toolbox_settings.json', 'w', encoding='utf-8') as file:
+                    json.dump(settings, file, indent=4, ensure_ascii=True)
 
     # print(settings['ip_addr'], settings['api_key'], settings['time_to_sleep'])
 
@@ -223,6 +229,11 @@ def show_rusiem_version() -> None | int:
                 print(f'Не удалось получить версию службы {service}. Возможно ее нет на сервере.\n')
 
 
+def set_logs() -> None:
+    logs = list(enumerate(settings['log_files']))
+    print(logs)
+
+
 def get_logs() -> None | int:
     config = Config(overrides={'sudo': {'password': settings['ssh_sudo_pass']}})
 
@@ -289,11 +300,13 @@ if __name__ == '__main__':
                 save_settings('ssh_password', ssh_pass)
                 save_settings('ssh_sudo_pass', ssh_sudo_pass)
                 save_settings('ssh_port', ssh_port)
-            case 7:  # Выгрузить инцидент и события
+            case 7:  # Задать логи для выгрузки (пути и имена файлов)
+                set_logs()
+            case 8:  # Выгрузить инцидент и события
                 save_incident(int(input('Введите номер инцидента: \n')))
-            case 8:  # Показать версии компонентов RuSIEM
+            case 9:  # Показать версии компонентов RuSIEM
                 show_rusiem_version()
-            case 9:  # Скачать логи
+            case 10:  # Скачать логи
                 get_logs()
             case 0:  # Выход
                 return
