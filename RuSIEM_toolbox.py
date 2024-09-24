@@ -91,6 +91,16 @@ def get_eps(*, to_file: bool = False) -> None | str:
 
 # Создание и загрузка настроек JSON.
 def settings_file() -> None:
+    logs_files = ['/var/www/html/app/storage/logs/user_actions.log', '/var/log/redis/redis-server.log',
+                  '/var/log/postgresql/postgresql-10-main.log', '/opt/rusiem/lsinput/log/*.log',
+                  '/opt/rusiem/lsinput/log/*.log.1*', '/opt/rusiem/lsfilter/log/*.log',
+                  '/opt/rusiem/lsfilter/log/*.log.1*', '/opt/rusiem/lselastic/log/*.log',
+                  '/opt/rusiem/lselastic/log/*.log.1*', '/opt/rusiem/frs_server/log/*.log',
+                  '/opt/rusiem/frs_server/log/*.log.1*', '/var/www/html/app/storage/logs/*.log',
+                  '/var/log/elasticsearch/rusiem.log', '/var/log/asset-rest-api/asset-api.log',
+                  '/var/log/rusiem-processing/app.log', '/var/log/clickhouse-server/clickhouse-server.log',
+                  '/var/log/clickhouse-server/clickhouse-server.err.log', '/var/mail/root']
+
     global settings
     if not os.path.isfile('RuSIEM_toolbox_settings.json'):
         print(f'Файла конфигурации не существует, создаем:\n'
@@ -98,7 +108,7 @@ def settings_file() -> None:
         with open('RuSIEM_toolbox_settings.json', 'w', encoding='utf-8') as file:
             settings = {'api_key': 'NO_API_KEY', 'ip_addr': '127.0.0.1', 'time_to_sleep': 5, 'ssh_login': 'None',
                         'ssh_password': 'None', 'ssh_sudo_pass': '', 'toolbox_version': 0.3, 'ssh_port': 22,
-                        'web_port': 443}
+                        'web_port': 443, 'log_files': logs_files}
             json.dump(settings, file, indent=4, ensure_ascii=True)
     else:
         with open('RuSIEM_toolbox_settings.json', 'r', encoding='utf-8') as file:
@@ -214,20 +224,9 @@ def get_logs() -> None | int:
                   f'\nПроверьте корректность данных для подключения.')
             return -1
 
-        # TODO стоит добавить этот список в настройки
-        logs_files = ['/var/www/html/app/storage/logs/user_actions.log', '/var/log/redis/redis-server.log',
-                      '/var/log/postgresql/postgresql-10-main.log', '/opt/rusiem/lsinput/log/*.log',
-                      '/opt/rusiem/lsinput/log/*.log.1*', '/opt/rusiem/lsfilter/log/*.log',
-                      '/opt/rusiem/lsfilter/log/*.log.1*', '/opt/rusiem/lselastic/log/*.log',
-                      '/opt/rusiem/lselastic/log/*.log.1*', '/opt/rusiem/frs_server/log/*.log',
-                      '/opt/rusiem/frs_server/log/*.log.1*', '/var/www/html/app/storage/logs/*.log',
-                      '/var/log/elasticsearch/rusiem.log', '/var/log/asset-rest-api/asset-api.log',
-                      '/var/log/rusiem-processing/app.log', '/var/log/clickhouse-server/clickhouse-server.log',
-                      '/var/log/clickhouse-server/clickhouse-server.err.log', '/var/mail/root']
-
         conn.sudo(f'rm -rf /tmp/rusiem_tolboox_{today_date}', hide='stderr')
         conn.run(f'mkdir /tmp/rusiem_tolboox_{today_date}', hide='stderr')
-        for log_file in logs_files:
+        for log_file in settings['log_files']:
             try:
                 conn.sudo(f'cp {log_file} /tmp/rusiem_tolboox_{today_date}/', hide='stderr')
             except:
