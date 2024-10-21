@@ -12,16 +12,16 @@ from fabric import Connection, Config
 # Убираем предупреждение о самоподписанном сертификате СИЕМ
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Глобальная переменная настроек и текущей даты
 settings: dict = {}
 today_date = datetime.now().date().strftime("%Y_%m_%d")
-
-eps_file_exists = False
-if os.path.isfile(f'current_eps_{today_date}.csv'):
-    eps_file_exists = True
 
 
 # Вывод основного меню и опций
 def hello_message() -> None:
+    """
+    Приветственное сообщение при запуске программы с пунктами меню.
+    """
     print(f'\n{'-' * 20}\n'
           f'Добро пожаловать в RuSIEM Toolbox версии {settings['toolbox_version']}!\n'
           f'{'-' * 20}\n'
@@ -43,6 +43,12 @@ def hello_message() -> None:
 
 
 def get_eps(*, to_file: bool = False) -> None | str:
+    """
+    Функция выводит на экран текущее значение SearchEPS и EPS из СИЕМ.
+    Умеет записывать данные в CSV файл.
+    :param to_file: Записывать ли данные в файл
+    :return:
+    """
     request_params = {'_api_key': settings['api_key']}
     # Проверяем можем ли мы получить данные о текущем значении EPS или что-то не так.
     try:
@@ -62,6 +68,11 @@ def get_eps(*, to_file: bool = False) -> None | str:
 
     # Если выбрана запись в файл
     if to_file:
+        # Проверяем существует ли файл для записи EPS
+        eps_file_exists = False
+        if os.path.isfile(f'current_eps_{today_date}.csv'):
+            eps_file_exists = True
+
         # Если файл не существует - создаем его и вписываем название поле вверху.
         if not eps_file_exists:
             with open(f'current_eps_{today_date}.csv', 'w', newline='', encoding='utf-8') as file:
@@ -99,6 +110,11 @@ def get_eps(*, to_file: bool = False) -> None | str:
 
 # Сохранение новых параметров настроек
 def save_settings(param, value) -> None:
+    """
+    Функция сохраняет переданный параметр настроек и его значение в файл настроек.
+    :param param: Имя параметра
+    :param value: Значение параметра
+    """
     with open('RuSIEM_toolbox_settings.json', 'w', encoding='utf-8') as file:
         global settings
         settings[param] = value
@@ -107,6 +123,9 @@ def save_settings(param, value) -> None:
 
 # Создание и загрузка настроек JSON.
 def settings_file() -> None:
+    """
+    Функция создания файла настроек.
+    """
     log_files = ['/var/www/html/app/storage/logs/user_actions.log', '/var/log/redis/redis-server.log',
                  '/var/log/postgresql/postgresql-10-main.log', '/opt/rusiem/lsinput/log/*.log',
                  '/opt/rusiem/lsinput/log/*.log.1*', '/opt/rusiem/lsfilter/log/*.log',
@@ -119,7 +138,7 @@ def settings_file() -> None:
 
     global settings
     settings = {'api_key': 'NO_API_KEY', 'ip_addr': '127.0.0.1', 'time_to_sleep': 5, 'ssh_login': 'None',
-                'ssh_password': 'None', 'ssh_sudo_pass': '', 'toolbox_version': 0.4, 'ssh_port': 22,
+                'ssh_password': 'None', 'ssh_sudo_pass': '', 'toolbox_version': 0.6, 'ssh_port': 22,
                 'web_port': 443, 'log_files': log_files}
 
     if not os.path.isfile('RuSIEM_toolbox_settings.json'):
@@ -141,11 +160,13 @@ def settings_file() -> None:
             with open('RuSIEM_toolbox_settings.json', 'w', encoding='utf-8') as file:
                 json.dump(settings, file, indent=4, ensure_ascii=True)
 
-    # print(settings['ip_addr'], settings['api_key'], settings['time_to_sleep'])
-
 
 # Сохранение инцидента и его событий в файл
 def save_incident(num: int):
+    """
+    Функция сохранения инцидента и его событий из SIEM в json файлы.
+    :param num: Номер (ID) инцидента в SIEM
+    """
     request_params = {'_api_key': settings['api_key']}
     request_params_limit = {'_api_key': settings['api_key'], 'limit': 999}
     req_inc = requests.get(f'https://{settings['ip_addr']}:{settings['web_port']}/api/v1/incidents/{num}/fullinfo',
@@ -164,6 +185,10 @@ def save_incident(num: int):
 
 
 def show_rusiem_version() -> None | int:
+    """
+    Функция выводит текущие версии компонентов RuSIEM и все характеристики сервера.
+    :return:
+    """
     config = Config(overrides={'sudo': {'password': settings['ssh_sudo_pass']}})
 
     with Connection(settings['ip_addr'], port=settings['ssh_port'], user=settings['ssh_login'],
@@ -232,12 +257,15 @@ def show_rusiem_version() -> None | int:
 
 
 def set_logs() -> None:
+    """
+    Функция позволяет добавлять и удалять из списка логов записи (нужна для функции сбора логов по данному списку).
+    """
     logs = list(enumerate(settings['log_files'], 1))
     print('Текущий список логов для сбора:\n')
     for log in logs:
         print(f'{log[0]:3}: {log[1]}')
 
-    print('\n1) Удалить лог из списка \n2) Добавить лог в список')
+    print('\n1) Удалить лог из списка \n2) Добавить лог в список\n3) Вернуться в меню')
     choice = input()
     if choice == '1':
         print('Какой файл удалить? Укажите номер.')
@@ -254,11 +282,18 @@ def set_logs() -> None:
         settings['log_files'].append(log)
         save_settings('log_files', settings['log_files'])
         print('Лог файл успешно добавлен!')
+    elif choice == '3':
+        return
     else:
         print('Такого пункта нет.')
 
 
 def get_logs() -> None | int:
+    """
+    Функция подключается по SSH к серверу RuSIEM, формирует архив логов и скачивает в
+    текущую директорию выполнения скрипта.
+    :return:
+    """
     config = Config(overrides={'sudo': {'password': settings['ssh_sudo_pass']}})
 
     with Connection(settings['ip_addr'], port=settings['ssh_port'], user=settings['ssh_login'],
@@ -283,14 +318,13 @@ def get_logs() -> None | int:
         print(f'Создаем архив с логами, ждите.')
         conn.run(f'tar -czvf /tmp/rusiem_tolboox_{today_date}/logs.tar.gz /tmp/rusiem_tolboox_{today_date}/*',
                  hide=True)
+        awk = "awk '{print $5}'"
+        print(f'Архив создан, его размер: ', end='')
+        conn.run(f"ls -lh /tmp/rusiem_tolboox_{today_date}/logs.tar.gz | {awk}")
         print(f'Скачиваем созданный архив, ждите.')
         conn.get(f'/tmp/rusiem_tolboox_{today_date}/logs.tar.gz')
         print(f'Архив сохранен в:\n{os.getcwd()}\\logs.tar.gz')
         conn.sudo(f'rm -rf /tmp/rusiem_tolboox_{today_date}', hide='stderr')
-        # conn.sudo('cp /var/lib/clickhouse/uuid /tmp/toolbox_uuid', hide='stderr')
-        # conn.sudo('chmod 777 /tmp/toolbox_uuid', hide='stderr')
-        # conn.get('/tmp/toolbox_uuid')
-        # conn.sudo('rm -rf /tmp/toolbox_uuid', hide='stderr')
 
 
 if __name__ == '__main__':
